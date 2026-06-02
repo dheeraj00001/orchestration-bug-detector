@@ -6,16 +6,19 @@ from .registry import ModuleRegistry
 from .evidence_resolver import EvidenceResolver
 from .zone_explorer import ZonalExplorer
 
+from .safe_fs import SafeFileSystem
+
 class DiscoveryEngine:
     def __init__(self, virtual_fs: Dict[str, str] = None):
         self.virtual_fs = virtual_fs
         self.registry = None
         self.evidence_resolver = EvidenceResolver()
+        self.fs = SafeFileSystem()
 
     def _read_content(self, file_path: Path) -> str:
         if self.virtual_fs is not None:
             return self.virtual_fs.get(str(file_path), "")
-        return file_path.read_text()
+        return self.fs.read_text(file_path)
 
     def generate(self, root_dir: str = ".", seed_service: Optional[str] = None, max_distance: int = 2) -> Dict:
         root_path = Path(root_dir).resolve()

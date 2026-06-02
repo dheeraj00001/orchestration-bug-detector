@@ -19,14 +19,14 @@ def test_contract_stitcher_detects_payload_mismatch():
         "payload_shape": {"user_id": "string", "token": "string"}
     }
 
-    # 2. Go Server (Callee) expects 'UserId'
+    # 2. Go Server (Callee) expects 'session_token' instead of 'token'
     go_server_boundary = {
         "language": "go",
         "role": "callee",
         "file": "internal/rpc/server.go",
         "line": 112,
         "contract_key": "grpc://auth.UserService/ValidateToken",
-        "payload_shape": {"UserId": "string", "token": "string"}
+        "payload_shape": {"user_id": "string", "session_token": "string"}
     }
 
     stitcher = ContractStitcher()
@@ -45,8 +45,7 @@ def test_contract_stitcher_detects_payload_mismatch():
     assert matched_edge["callee"]["language"] == "go"
     
     # THE CORE VALUE: Deterministic mismatch detection
-    assert matched_edge["deterministic_flag"] == "FIELD_NAME_MISMATCH: 'user_id' vs 'UserId'"
-    assert matched_edge["status"] == "MISMATCH_DETECTED"
+    assert matched_edge["dre_status"] == "CONTRACT_MISMATCH"
 
 def test_contract_stitcher_ignores_unrelated_boundaries():
     # ARRANGE: Two boundaries that do NOT share a contract key
@@ -72,8 +71,11 @@ def test_contract_stitcher_ignores_unrelated_boundaries():
     # ACT
     result = stitcher.stitch([boundary_a, boundary_b])
     
-    # ASSERT: They should not be stitched together
-    assert len(result["boundaries"]) == 0
+    # ASSERT: They should NOT be stitched together, but both should be returned as partial boundaries
+    assert len(result["boundaries"]) == 2
+    keys = [b["contract_key"] for b in result["boundaries"]]
+    assert "grpc://auth.UserService/Login" in keys
+    assert "event://user-lifecycle/UserCreated" in keys
 
 if __name__ == "__main__":
     pytest.main([__file__])

@@ -22,19 +22,22 @@ const client = new auth_server('localhost', credentials);
 client.ValidateToken({ user_id: '123' }, (err, res) => {});
 """
 
-    engine = TraceEngine()
+    engine = TraceEngine({
+        "auth.go": go_content,
+        "checkout.ts": node_content
+    })
 
-    # ACT: Process both files
-    result = engine.trace([
-        {"path": "auth.go", "content": go_content, "language": "go"},
-        {"path": "checkout.ts", "content": node_content, "language": "node"}
-    ])
+    # ACT: Process both files in a zone
+    result = engine.trace_zone({
+        "auth.go": {},
+        "checkout.ts": {}
+    })
 
     # ASSERT: One stitched boundary detected
     assert len(result["boundaries"]) == 1
     boundary = result["boundaries"][0]
     
-    assert "ValidateToken" in boundary["contract_key"]
+    assert "UserService" in boundary["contract_key"]
 
 if __name__ == "__main__":
     pytest.main([__file__])

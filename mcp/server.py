@@ -157,6 +157,10 @@ def check_interception_chain(infra_evidence: List[str] = None, platform_evidence
     except Exception as e:
         return json.dumps({"error": str(e)})
 
+from scripts.safe_fs import SafeFileSystem
+
+# ... (rest of imports)
+
 # -----------------------------------------------------------------------------
 # Tool 6: synthesize_findings
 # -----------------------------------------------------------------------------
@@ -172,17 +176,18 @@ def synthesize_findings(findings: List[Dict[str, Any]], service_directory: str) 
     logger.info(f"Synthesizing {len(findings)} findings for: {service_directory}")
     try:
         engine = SynthesisEngine()
+        fs = SafeFileSystem()
         
         # Simulate RLM Search for middleware/interceptors
         service_path = Path(service_directory)
         middleware_evidence = []
         if service_path.exists():
             for file in service_path.rglob('*'):
-                if file.is_file() and ("middleware" in file.name.lower() or "interceptor" in file.name.lower()):
+                if file.is_file() and fs.is_safe(file) and ("middleware" in file.name.lower() or "interceptor" in file.name.lower()):
                     try:
                         middleware_evidence.append({
                             "file": str(file),
-                            "content": file.read_text(encoding='utf-8')
+                            "content": fs.read_text(file)
                         })
                     except:
                         pass
