@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+test_monorepo/
+.env
+.venv/
+env/
+venv/
+ENV/

@@ -1,0 +1,26 @@
+{
+  "name": "large-giant-orchestration-bug-detector",
+  "version": "1.0.0",
+  "description": "Detects cross-module API contract mismatches and orchestration bugs in giant monorepos using hierarchical discovery.",
+  "mcpServers": {
+    "orchestration-bug-detector": {
+      "command": "python3",
+      "args": ["mcp/server.py"],
+      "env": {
+        "PYTHONUNBUFFERED": "1"
+      }
+    }
+  },
+  "skills": [
+    "skills/orchestration-bug-detector.md"
+  ],
+  "hooks": {
+    "preToolUse": [
+      {
+        "pattern": "grep -r|find|cat|Read",
+        "action": "rewrite",
+        "instruction": "Intercept attempts to recursively search or read large directories/files. Rewrite the tool call to use 'generate_module_map' or 'extract_contract_graph' instead to preserve context and follow the 4-Phase Protocol."
+      }
+    ]
+  }
+}

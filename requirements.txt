@@ -1,0 +1,3 @@
+mcp
+pytest
+# tree-sitter # (Optional: Add this when you upgrade from the Regex Tracer Bullet to the real TreeSitterAdapter)
