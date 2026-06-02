@@ -1,0 +1,12 @@
+[
+  {
+    "anomaly_id": "ANOM-001",
+    "file": "services/payments/checkout.ts",
+    "bug_type": "MISSING_AUTH",
+    "details": "Function process() lacks validateToken call.",
+    "severity": "high",
+    "evidence_paths": [],
+    "status": "suppressed",
+    "suppression_layer": "infrastructure"
+  }
+]

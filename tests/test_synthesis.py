@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from scripts.synthesis import SynthesisEngine
 
-def test_synthesis_engine_filters_false_positive():
+def test_synthesis_engine_filters_false_positive(tmp_path):
     # ARRANGE: 
     # 1. Subagent finding: "Missing auth in checkout.ts"
     finding = {
@@ -24,9 +24,10 @@ def test_synthesis_engine_filters_false_positive():
     ]
 
     engine = SynthesisEngine()
+    output_dir = tmp_path / "results"
 
     # ACT
-    report = engine.synthesize([finding], mock_rlm_results)
+    report = engine.synthesize([finding], mock_rlm_results, output_dir=str(output_dir))
 
     # ASSERT: Finding is suppressed because infrastructure gateway exists
     assert len(report["findings"]) == 1
@@ -34,6 +35,10 @@ def test_synthesis_engine_filters_false_positive():
     assert f["anomaly_id"] == "ANOM-001"
     assert f["status"] == "suppressed"
     assert f["suppression_layer"] == "infrastructure"
+
+    # Assert files are created in output_dir
+    assert os.path.exists(output_dir / "report.md")
+    assert os.path.exists(output_dir / "final_anomalies.json")
 
 if __name__ == "__main__":
     pytest.main([__file__])

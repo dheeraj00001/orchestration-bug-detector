@@ -54,13 +54,21 @@ class DeterministicSynthesizer:
 
         return sorted_findings
 
-    def render_reports(self, findings: List[Dict]):
+    def render_reports(self, findings: List[Dict], output_dir: str = "."):
+        # Ensure output_dir exists
+        import os
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+
+        json_path = os.path.join(output_dir, "final_anomalies.json")
+        report_path = os.path.join(output_dir, "report.md")
+
         # Render final_anomalies.json
-        with open("final_anomalies.json", "w") as f:
+        with open(json_path, "w") as f:
             json.dump(findings, f, indent=2)
 
         # Render report.md
-        with open("report.md", "w") as f:
+        with open(report_path, "w") as f:
             f.write("# Orchestration Bug Detection Report\n\n")
             if not findings:
                 f.write("No critical orchestration bugs detected.\n")

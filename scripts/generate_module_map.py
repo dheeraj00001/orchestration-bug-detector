@@ -26,21 +26,29 @@ WEAK_SIGNALS = {
     'requirements.txt': ['pika', 'grpcio', 'requests'],
 }
 
+from .registry import ModuleRegistry
+
 def generate_module_map(root_path):
     root = Path(root_path)
+    registry = ModuleRegistry(root)
     modules = {}
 
     # Pass 1: Identify Nodes (Module Boundaries)
     for path in root.rglob('*'):
-        if path.name in ['package.json', 'go.mod', 'requirements.txt', 'pyproject.toml', 'pom.xml', 'build.gradle']:
-            module_root = path.parent
-            rel_path = str(module_root.relative_to(root))
-            if rel_path == '.': rel_path = 'root'
-            
-            if rel_path not in modules:
-                modules[rel_path] = {
-                    "path": rel_path,
-                    "type": path.name,
+        if path.is_file():
+            module_name = registry.get_module_name(path.relative_to(root))
+            if module_name not in modules:
+                # Find the marker file for this module to determine type
+                marker_type = "unknown"
+                module_dir = root / (module_name if module_name != 'root' else '')
+                for marker in registry.MODULE_MARKERS:
+                    if (module_dir / marker).exists():
+                        marker_type = marker
+                        break
+                
+                modules[module_name] = {
+                    "path": module_name,
+                    "type": marker_type,
                     "edges": {
                         "strong": [],
                         "medium": [],
@@ -62,7 +70,9 @@ def generate_module_map(root_path):
         config_file = mod_dir / data["type"]
         if config_file.exists():
             try:
-                content = config_file.read_text()
+                from .safe_fs import SafeFileSystem
+                fs = SafeFileSystem()
+                content = fs.read_text(config_file)
                 
                 # Medium
                 for pattern in MEDIUM_SIGNALS.get(data["type"], []):

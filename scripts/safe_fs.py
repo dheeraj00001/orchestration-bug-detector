@@ -18,7 +18,7 @@ class SafeFileSystem:
         """Determines if a file is safe to read as text."""
         return path.suffix.lower() not in self.ignored_extensions
 
-    def read_text(self, path: Path, errors: str = "ignore") -> str:
+    def read_text(self, path: Path, errors: str = "replace") -> str:
         """Reads file as text with error-tolerant decoding."""
         if not self.is_safe(path):
             return ""

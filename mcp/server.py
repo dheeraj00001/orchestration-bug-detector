@@ -89,23 +89,28 @@ from scripts.digester import AnomalyDigester
 # Tool 3: run_dre_rules
 # -----------------------------------------------------------------------------
 @mcp.tool()
-def run_dre_rules(graph: Dict[str, Any]) -> str:
+def run_dre_rules(graph: Dict[str, Any], output_dir: str = ".") -> str:
     """
     Performs Phase 3: Deterministic Classification on a contract graph.
     Returns the prioritized anomaly digest and writes all anomalies to disk.
     
     Args:
         graph: The stitched contract graph from extract_zonal_graph.
+        output_dir: Optional. The directory where to save the anomaly JSON files. Defaults to ".".
     """
-    logger.info("Running DRE rules on contract graph")
+    logger.info(f"Running DRE rules on contract graph, output_dir: {output_dir}")
     try:
         digester = AnomalyDigester()
         top, all_anom = digester.digest(graph)
         
+        # Ensure output_dir exists
+        if not os.path.exists(output_dir):
+            os.makedirs(output_dir, exist_ok=True)
+
         # Write to disk as per PRD
-        with open("top_anomalies.json", "w") as f:
+        with open(os.path.join(output_dir, "top_anomalies.json"), "w") as f:
             json.dump(top, f, indent=2)
-        with open("all_anomalies.json", "w") as f:
+        with open(os.path.join(output_dir, "all_anomalies.json"), "w") as f:
             json.dump(all_anom, f, indent=2)
             
         return json.dumps(top, indent=2)
@@ -165,15 +170,16 @@ from scripts.safe_fs import SafeFileSystem
 # Tool 6: synthesize_findings
 # -----------------------------------------------------------------------------
 @mcp.tool()
-def synthesize_findings(findings: List[Dict[str, Any]], service_directory: str) -> str:
+def synthesize_findings(findings: List[Dict[str, Any]], service_directory: str, output_dir: str = ".") -> str:
     """
     Performs Phase 4: SYNTHESIZE. Merges findings and renders the final report.
     
     Args:
         findings: A list of dictionaries containing subagent results.
         service_directory: The root directory of the service to search for global middleware.
+        output_dir: Optional. The directory where to save the report files. Defaults to ".".
     """
-    logger.info(f"Synthesizing {len(findings)} findings for: {service_directory}")
+    logger.info(f"Synthesizing {len(findings)} findings for: {service_directory}, output_dir: {output_dir}")
     try:
         engine = SynthesisEngine()
         fs = SafeFileSystem()
@@ -192,7 +198,7 @@ def synthesize_findings(findings: List[Dict[str, Any]], service_directory: str) 
                     except:
                         pass
 
-        result = engine.synthesize(findings, middleware_evidence)
+        result = engine.synthesize(findings, middleware_evidence, output_dir=output_dir)
         return json.dumps(result, indent=2)
     except Exception as e:
         logger.error(f"Error synthesizing findings: {e}")

@@ -11,6 +11,15 @@ class DeterministicRuleEngine:
         """
         Classifies a boundary based on deterministic precedence rules.
         """
+        # 0. ORCHESTRATION_BYPASS check
+        payload_shape = boundary.get("payload_shape", {})
+        if payload_shape.get("__ORCHESTRATION_BYPASS__") == "true":
+            return "ORCHESTRATION_BYPASS"
+
+        # 0b. LOGIC_FLAW check
+        if boundary.get("role") == "logic_flaw":
+            return "LOGIC_FLAW"
+
         anchor_status = boundary.get("anchor_status", "absent")
         payload_match = boundary.get("payload_match", True)
         is_strong = boundary.get("is_strong_candidate", False)
@@ -37,7 +46,7 @@ class DeterministicRuleEngine:
         """
         Determines if a finding should be promoted to the prioritized digest.
         """
-        if classification == "CONTRACT_MISMATCH":
+        if classification in ["CONTRACT_MISMATCH", "ORCHESTRATION_BYPASS", "LOGIC_FLAW"]:
             return True
 
         if classification == "MISSING_ANCHOR":

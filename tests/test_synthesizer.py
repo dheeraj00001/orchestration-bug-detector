@@ -42,9 +42,9 @@ def test_synthesizer_sorting():
     assert result[1]["anomaly_id"] == "C"
     assert result[2]["anomaly_id"] == "B"
 
-def test_synthesizer_report_rendering(tmp_path):
+def test_synthesizer_report_rendering_with_output_dir(tmp_path):
     import os
-    os.chdir(tmp_path)
+    output_dir = tmp_path / "reports"
     synth = DeterministicSynthesizer()
     findings = [
         {
@@ -57,12 +57,12 @@ def test_synthesizer_report_rendering(tmp_path):
         }
     ]
     
-    synth.render_reports(findings)
+    synth.render_reports(findings, output_dir=str(output_dir))
     
-    assert os.path.exists("report.md")
-    assert os.path.exists("final_anomalies.json")
+    assert os.path.exists(output_dir / "report.md")
+    assert os.path.exists(output_dir / "final_anomalies.json")
     
-    report_content = open("report.md").read().lower()
+    report_content = open(output_dir / "report.md").read().lower()
     assert "mismatch_1" in report_content
     assert "critical" in report_content
     assert "token mismatch" in report_content

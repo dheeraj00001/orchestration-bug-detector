@@ -12,11 +12,12 @@ class SynthesisEngine:
         self.synth = DeterministicSynthesizer()
         self.interceptor = InterceptionChain()
 
-    def synthesize(self, findings: List[Dict], rlm_search_results: List[Dict] = None) -> Dict:
+    def synthesize(self, findings: List[Dict], rlm_search_results: List[Dict] = None, output_dir: str = ".") -> Dict:
         """
         Synthesizes findings into a deterministic report.
         rlm_search_results can be used to populate the interception evidence.
         """
+        import os
         # 1. Prepare interception evidence
         # (Simplified mapping of RLM search results to layers)
         evidence = {"infra": [], "platform": [], "local": []}
@@ -45,10 +46,10 @@ class SynthesisEngine:
             final_findings.append(f)
 
         # 4. Render Reports
-        self.synth.render_reports(final_findings)
+        self.synth.render_reports(final_findings, output_dir=output_dir)
 
         return {
             "findings": final_findings,
-            "report_path": "report.md",
-            "json_path": "final_anomalies.json"
+            "report_path": os.path.join(output_dir, "report.md"),
+            "json_path": os.path.join(output_dir, "final_anomalies.json")
         }
