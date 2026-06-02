@@ -1,6 +1,6 @@
 # Orchestration Bug Detector
 
-LLM-orchestrated static analysis tool for detecting cross-module architectural defects in large-scale polyglot monorepos. It implements a 4-phase hierarchical protocol to identify API contract mismatches, distributed saga compensation failures, authorization boundary leaks, and event-driven infinite loops without context window exhaustion.
+Deterministic static analysis tool for detecting architectural defects in large-scale polyglot monorepos. It implements a 4-phase zonal protocol to identify API contract mismatches, authorization boundary leaks, and contract drift without context window exhaustion.
 
 ## Quickstart
 
@@ -21,67 +21,68 @@ Run the MCP server to expose the detection tools:
 python3 mcp/server.py
 ```
 
-Register the plugin in your Gemini CLI configuration (`.gemini-plugin/plugin.json`):
-```json
-{
-  "name": "orchestration-bug-detector",
-  "engines": {
-    "mcp": {
-      "command": "python3",
-      "args": ["mcp/server.py"]
-    }
-  },
-  "skills": ["skills/orchestration-bug-detector.md"]
-}
-```
+The server provides the following Model Context Protocol (MCP) tools:
+1. `generate_module_map`: Scans monorepo topology and scores edges (Tier 1-3).
+2. `extract_zonal_graph`: Performs zonal contract resolution centered on a seed service.
+3. `run_dre_rules`: Classifies anomalies using the Deterministic Rule Engine.
+4. `plan_subagent_tasks`: Generates targeted verification tasks for subagents.
+5. `check_interception_chain`: Validates findings against hierarchical middleware layers.
+6. `synthesize_findings`: Merges subagent outputs into a final deterministic report.
 
 ## System Architecture
 
-The detector operates through four distinct layers to ensure context efficiency and deterministic accuracy:
+The detector operates through four distinct phases to ensure context efficiency and deterministic accuracy:
 
-1.  **Discovery (Level 1)**: Heuristic 3-tier signal weighting scans monorepo topology via configuration markers (`go.mod`, `package.json`, `.proto`) to identify suspicious communication paths.
-2.  **Deterministic Trace (Level 2)**: Polyglot Contract-Key resolution engine stitches disparate language ASTs using universal identifiers to flag payload schema mismatches.
-3.  **Delegated Analysis (Level 3)**: Isolated subagents investigate high-risk paths using Recursive Language Model (RLM) sandboxed execution, avoiding raw file reads.
-4.  **Synthesis Validation (Phase 4)**: A challenge-response loop validates findings against global middleware snippets to eliminate false positives.
+### Phase 1: MAP (Zonal Discovery)
+Performs a two-pass scan. Pass 1 identifies module boundaries via markers (`package.json`, `go.mod`, `requirements.txt`). Pass 2 scores edges into Tiers 1-3 based on "High-Signal Usage Evidence" on both sides of the boundary. Includes `ZonalExplorer` for bounded BFS traversal.
+
+### Phase 2: TRACE (Zonal Contract Resolution)
+Resolves contract evidence exclusively within the identified impact zone. Implements **Anchor-First Validation**, prioritizing official IDLs (Proto/GraphQL) over implementation details.
+
+### Phase 3: DRE & DIGEST (Deterministic Classification)
+Applies a **Deterministic Rule Engine (DRE)** to classify anomalies:
+- `MATCHED`: Contract and implementation align.
+- `ANCHOR_DRIFT`: Payload aligns but anchor is stale or version-skewed.
+- `CONTRACT_MISMATCH`: Payload discrepancy detected (highest precedence).
+- `MISSING_ANCHOR`: High-signal usage without a declared IDL.
+
+Includes `CanonicalNormalizer` for 1-to-1 field mapping verification (lowercase, strip underscores, collapse camelCase).
+
+### Phase 4: DELEGATE & SYNTHESIZE (Verification & Reporting)
+Spawns subagents with bounded hypotheses for structural verification. The `DeterministicSynthesizer` merges results, applying the **Hierarchical Evidence Chain** (Infra > Platform > Local) to suppress false positives handled by global middleware.
 
 ## Testing & Verification
 
-The codebase follows Test-Driven Development (TDD) principles. Run the complete suite using `pytest`:
+The codebase adheres to strict Test-Driven Development (TDD) principles.
 
 ```bash
 pytest tests/
 ```
 
-| Module | Responsibility | Test File |
-|--------|----------------|-----------|
-| `DiscoveryEngine` | Module mapping & signal weighting | `tests/test_discovery_engine.py` |
-| `ContractStitcher` | Cross-language boundary matching | `tests/test_contract_stitcher.py` |
-| `TraceEngine` | End-to-end trace orchestration | `tests/test_trace_engine.py` |
-| `SubagentOrchestrator` | Task generation for subagents | `tests/test_orchestrator.py` |
-| `SynthesisEngine` | False positive reduction | `tests/test_synthesis.py` |
-
-## Dependencies & Requirements
-
-- `mcp`: Model Context Protocol Python SDK
-- `pytest`: Testing framework
-- `tree-sitter` (Optional): Required for AST-based boundary extraction (experimental)
+| Module | Responsibility | Test Count |
+|--------|----------------|------------|
+| `DiscoveryEngine` | Zonal discovery & tier scoring | 2 |
+| `EvidenceResolver` | Tier 1/2/3 scoring rules | 3 |
+| `ZonalExplorer` | Bounded BFS & Tier pruning | 4 |
+| `ZonalContractResolver`| Cross-service contract stitching | 1 |
+| `CanonicalNormalizer` | Field-name normalization | 5 |
+| `DeterministicRuleEngine`| Anomaly classification & priority | 6 |
+| `AnomalyDigester` | Digest generation & suppression | 2 |
+| `DeterministicSynthesizer`| Subagent merge & reporting | 3 |
+| `InterceptionChain` | Hierarchical middleware logic | 4 |
 
 ## Configuration
 
-The plugin behavior is controlled by the manifest and the skill instruction set:
 - **Manifest**: `.gemini-plugin/plugin.json`
-- **Protocol Brain**: `skills/orchestration-bug-detector.md`
+- **Skill Definitions**: `skills/orchestration-bug-detector.md`
 
 ## Development Setup
 
-The project uses a deep module architecture to maintain locality of logic and high leverage at interfaces.
-
-### Signal Resolvers
-Adding support for a new language requires implementing a `SignalResolver` in `scripts/signals.py` and registering it in the `DiscoveryEngine`.
-
-### Boundary Extractors
-Language-specific parsing logic resides in `scripts/extractors/`. New extractors must implement the `BoundaryExtractor` interface defined in `base.py`.
+### Adding Language Support
+1. Implement a new extractor in `scripts/extractors/` by satisfying the `BoundaryExtractor` interface.
+2. Register the extension in `ZonalContractResolver`.
+3. Add module root markers to `ModuleRegistry.MODULE_MARKERS`.
 
 ## License & Attribution
 
-Internal Engineering Tool. Created for large-scale monorepo analysis.
+Internal Engineering Tool. Optimized for large-scale monorepo analysis.
