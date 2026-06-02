@@ -1,30 +1,54 @@
 from typing import List, Dict
+from .synthesizer import DeterministicSynthesizer
+from .interception_chain import InterceptionChain
 
 class SynthesisEngine:
     """
-    Synthesizes subagent findings and performs a 'Challenge-Response' validation
-    against global context to reduce false positives.
+    Orchestrates Phase 4: DELEGATE & SYNTHESIZE.
+    Synthesizes subagent findings and performs hierarchical suppression.
     """
 
-    def synthesize(self, findings: List[Dict], rlm_search_results: List[Dict]) -> Dict:
-        valid_bugs = []
-        false_positives = []
+    def __init__(self):
+        self.synth = DeterministicSynthesizer()
+        self.interceptor = InterceptionChain()
 
-        # Simple logic: if 'app.use' or 'Middleware' is found in search results 
-        # for the same service, we flag it as a potential false positive.
-        has_global_protection = any(
-            "app.use" in res["content"] or "Middleware" in res["content"]
-            for res in rlm_search_results
-        )
+    def synthesize(self, findings: List[Dict], rlm_search_results: List[Dict] = None) -> Dict:
+        """
+        Synthesizes findings into a deterministic report.
+        rlm_search_results can be used to populate the interception evidence.
+        """
+        # 1. Prepare interception evidence
+        # (Simplified mapping of RLM search results to layers)
+        evidence = {"infra": [], "platform": [], "local": []}
+        if rlm_search_results:
+            for res in rlm_search_results:
+                content = res.get("content", "").lower()
+                if "gateway" in content or "mesh" in content:
+                    evidence["infra"].append(res.get("file", "unknown"))
+                elif "shared" in content or "platform" in content:
+                    evidence["platform"].append(res.get("file", "unknown"))
+                elif "middleware" in content or "interceptor" in content:
+                    evidence["local"].append(res.get("file", "unknown"))
 
-        for finding in findings:
-            if finding["bug_type"] == "MISSING_AUTH" and has_global_protection:
-                finding["reason"] = "GLOBAL_MIDDLEWARE_PROTECTION"
-                false_positives.append(finding)
+        # 2. Deterministic Merge and Sort
+        merged_findings = self.synth.synthesize(findings)
+
+        # 3. Apply Interception Chain
+        final_findings = []
+        for f in merged_findings:
+            status, layer = self.interceptor.check_interception(evidence)
+            if status == "suppressed":
+                f["status"] = "suppressed"
+                f["suppression_layer"] = layer
             else:
-                valid_bugs.append(finding)
+                f["status"] = "confirmed"
+            final_findings.append(f)
+
+        # 4. Render Reports
+        self.synth.render_reports(final_findings)
 
         return {
-            "valid_bugs": valid_bugs,
-            "false_positives": false_positives
+            "findings": final_findings,
+            "report_path": "report.md",
+            "json_path": "final_anomalies.json"
         }
