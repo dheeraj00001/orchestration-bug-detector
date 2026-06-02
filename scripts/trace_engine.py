@@ -1,34 +1,13 @@
-from typing import List, Dict
-from .extractors.go import GoExtractor
-from .extractors.node import NodeExtractor
-from .stitcher import ContractStitcher
+from typing import List, Dict, Optional
+from .zonal_contract_resolver import ZonalContractResolver
 
 class TraceEngine:
     """
-    Orchestrates the Level 2 deterministic trace by coordinating language-specific
-    extractors and the ContractStitcher.
+    Orchestrates Phase 2: Zonal Contract Resolution.
     """
-    def __init__(self):
-        self.extractors = {
-            "go": GoExtractor(),
-            "node": NodeExtractor()
-        }
-        self.stitcher = ContractStitcher()
+    def __init__(self, virtual_fs: Dict[str, str] = None):
+        self.resolver = ZonalContractResolver(virtual_fs)
 
-    def trace(self, files: List[Dict]) -> Dict:
-        all_boundaries = []
-
-        for file_data in files:
-            lang = file_data.get("language")
-            content = file_data.get("content", "")
-            path = file_data.get("path", "")
-
-            extractor = self.extractors.get(lang)
-            if extractor:
-                boundaries = extractor.extract(content)
-                # Decorate with file path info
-                for b in boundaries:
-                    b["file"] = path
-                all_boundaries.extend(boundaries)
-
-        return self.stitcher.stitch(all_boundaries)
+    def trace_zone(self, zone: Dict) -> Dict:
+        """Resolves contract evidence only inside the provided impact zone."""
+        return self.resolver.resolve_contracts(zone)
