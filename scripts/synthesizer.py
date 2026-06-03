@@ -1,5 +1,6 @@
 import json
-from typing import List, Dict
+import hashlib
+from typing import List, Dict, Any
 from .interception_chain import InterceptionChain
 
 class DeterministicSynthesizer:
@@ -23,13 +24,36 @@ class DeterministicSynthesizer:
     def __init__(self):
         self.interceptor = InterceptionChain()
 
-    def synthesize(self, findings: List[Dict]) -> List[Dict]:
-        merged = {}
+    def _generate_fallback_id(self, finding: Dict) -> str:
+        rule = finding.get("classification", "UNKNOWN")
+        paths = "".join(sorted(finding.get("evidence_paths", [])))
+        hash_val = hashlib.md5(f"{rule}_{paths}".encode()).hexdigest()[:8]
+        return f"anomaly:fallback:{rule.lower()}:{hash_val}"
 
-        for f in findings:
-            aid = f["anomaly_id"]
+    def synthesize(self, findings: List[Any]) -> Dict[str, List[Dict]]:
+        merged = {}
+        quarantine = []
+
+        for original_f in findings:
+            if not isinstance(original_f, dict):
+                quarantine.append({"reason": "not_a_dict", "raw": original_f})
+                continue
+            
+            f = original_f.copy()
+            # Must have at least some basic fields to be considered valid
+            if "severity" not in f and "classification" not in f:
+                quarantine.append({"reason": "missing_required_fields", "raw": original_f})
+                continue
+                
+            aid = f.get("anomaly_id")
+            if not aid:
+                aid = self._generate_fallback_id(f)
+                f["anomaly_id"] = aid
+                
+            f["raw"] = original_f # preserve raw
+
             if aid not in merged:
-                merged[aid] = f.copy()
+                merged[aid] = f
                 merged[aid]["evidence_paths"] = list(set(f.get("evidence_paths", [])))
             else:
                 existing = merged[aid]
@@ -38,9 +62,8 @@ class DeterministicSynthesizer:
                 exis_sev = self.SEVERITY_ORDER.get(existing.get("severity", "low"), 0)
                 
                 if curr_sev > exis_sev:
-                    existing["severity"] = f["severity"]
+                    existing["severity"] = f.get("severity", "low")
                     # If severity is higher, we might want to adopt the new notes too if they are more comprehensive
-                    # PRD: "retain the finding with the higher severity; if severity is equal, merge... retain most comprehensive notes"
                     existing["notes"] = f.get("notes", existing.get("notes"))
                 
                 # Merge evidence paths
@@ -49,12 +72,15 @@ class DeterministicSynthesizer:
         # Sort: severity desc, anomaly_id asc
         sorted_findings = sorted(
             merged.values(),
-            key=lambda x: (-self.SEVERITY_ORDER.get(x.get("severity", "low"), 0), x["anomaly_id"])
+            key=lambda x: (-self.SEVERITY_ORDER.get(x.get("severity", "low"), 0), x.get("anomaly_id", ""))
         )
 
-        return sorted_findings
+        return {"valid": sorted_findings, "quarantine": quarantine}
 
-    def render_reports(self, findings: List[Dict], output_dir: str = "."):
+    def render_reports(self, synthesis_result: Dict[str, List[Dict]], output_dir: str = "."):
+        # We can accept either the new dict format or the old list format for backward compatibility
+        findings = synthesis_result.get("valid", []) if isinstance(synthesis_result, dict) else synthesis_result
+        
         # Ensure output_dir exists
         import os
         if not os.path.exists(output_dir):
@@ -63,9 +89,9 @@ class DeterministicSynthesizer:
         json_path = os.path.join(output_dir, "final_anomalies.json")
         report_path = os.path.join(output_dir, "report.md")
 
-        # Render final_anomalies.json
+        # Render final_anomalies.json (including quarantine if dict)
         with open(json_path, "w") as f:
-            json.dump(findings, f, indent=2)
+            json.dump(synthesis_result, f, indent=2)
 
         # Render report.md
         with open(report_path, "w") as f:
@@ -76,14 +102,18 @@ class DeterministicSynthesizer:
 
             for anom in findings:
                 f.write(f"## {anom['anomaly_id']}\n")
-                f.write(f"- **Severity**: {anom['severity'].upper()}\n")
+                f.write(f"- **Severity**: {anom.get('severity', 'low').upper()}\n")
                 f.write(f"- **Evidence**: {', '.join(anom.get('evidence_paths', []))}\n")
                 
                 description = ""
                 if "notes" in anom:
-                    description = anom["notes"].get("value", "")
+                    if isinstance(anom["notes"], dict):
+                        description = anom["notes"].get("value", "")
+                    else:
+                        description = str(anom["notes"])
                 
                 if not description:
                     description = f"Deterministic {anom.get('classification', 'finding')} detected at service boundary."
                 
                 f.write(f"- **Description**: {description}\n\n")
+

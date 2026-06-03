@@ -22,11 +22,11 @@ def test_synthesizer_deduplication_and_merge():
     ]
     
     result = synth.synthesize(findings)
-    assert len(result) == 1
-    assert result[0]["severity"] == "critical"
+    assert len(result["valid"]) == 1
+    assert result["valid"][0]["severity"] == "critical"
     # Evidence paths should be merged
-    assert "services/auth/src/handler.go" in result[0]["evidence_paths"]
-    assert "services/payments/src/client.js" in result[0]["evidence_paths"]
+    assert "services/auth/src/handler.go" in result["valid"][0]["evidence_paths"]
+    assert "services/payments/src/client.js" in result["valid"][0]["evidence_paths"]
 
 def test_synthesizer_sorting():
     synth = DeterministicSynthesizer()
@@ -38,9 +38,9 @@ def test_synthesizer_sorting():
     
     result = synth.synthesize(findings)
     # High severity first, then alpha by ID
-    assert result[0]["anomaly_id"] == "A"
-    assert result[1]["anomaly_id"] == "C"
-    assert result[2]["anomaly_id"] == "B"
+    assert result["valid"][0]["anomaly_id"] == "A"
+    assert result["valid"][1]["anomaly_id"] == "C"
+    assert result["valid"][2]["anomaly_id"] == "B"
 
 def test_synthesizer_report_rendering_with_output_dir(tmp_path):
     import os
@@ -66,3 +66,32 @@ def test_synthesizer_report_rendering_with_output_dir(tmp_path):
     assert "mismatch_1" in report_content
     assert "critical" in report_content
     assert "token mismatch" in report_content
+
+def test_synthesizer_missing_anomaly_id():
+    synth = DeterministicSynthesizer()
+    findings = [
+        {
+            "severity": "high",
+            "classification": "CONTRACT_MISMATCH",
+            "evidence_paths": ["services/auth/src/handler.go"],
+            "status": "confirmed"
+        }
+    ]
+    
+    result = synth.synthesize(findings)
+    assert len(result["valid"]) == 1
+    assert "anomaly_id" in result["valid"][0]
+    assert result["valid"][0]["anomaly_id"].startswith("anomaly:")
+    assert len(result["quarantine"]) == 0
+
+def test_synthesizer_quarantine_malformed():
+    synth = DeterministicSynthesizer()
+    findings = [
+        "not a dict",
+        None,
+        {"just": "garbage"}
+    ]
+    
+    result = synth.synthesize(findings)
+    assert len(result["valid"]) == 0
+    assert len(result["quarantine"]) == 3

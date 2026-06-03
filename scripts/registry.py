@@ -32,15 +32,37 @@ class ModuleRegistry:
         if abs_path in self._module_cache:
             return self._module_cache[abs_path]
 
-        # HEURISTIC 1: Next.js API Routes (app/api/[route]/...)
         try:
             rel_path = abs_path.relative_to(root_abs)
             parts = rel_path.parts
-            if len(parts) >= 3 and parts[0] == "app" and parts[1] == "api":
-                module_name = f"app/api/{parts[2]}"
-                # print(f"DEBUG: Found Next.js module {module_name} for {rel_path}")
+            
+            # Remove 'src' prefix if present
+            if len(parts) > 0 and parts[0] == "src":
+                parts = parts[1:]
+                
+            # HEURISTIC: Next.js App Router (app/**/route.ts, page.tsx, etc.)
+            if len(parts) >= 1 and parts[0] == "app":
+                # Special case: middleware.ts is often at root or src/
+                if abs_path.name in ["route.ts", "route.js", "page.tsx", "page.jsx", "layout.tsx", "layout.jsx", "loading.tsx", "error.tsx"]:
+                    # The module is the directory containing this entry point
+                    module_name = "/".join(rel_path.parts[:-1]) # use original rel_path for module name
+                    self._module_cache[abs_path] = module_name
+                    return module_name
+                    
+            # HEURISTIC: Next.js Pages Router API (pages/api/**)
+            if len(parts) >= 2 and parts[0] == "pages" and parts[1] == "api":
+                module_name = "/".join(rel_path.parts[:-1])
+                if module_name == "pages/api" or module_name == "src/pages/api":
+                    module_name = str(rel_path) # the file itself is the endpoint
                 self._module_cache[abs_path] = module_name
                 return module_name
+                
+            # HEURISTIC: middleware.ts
+            if rel_path.name in ["middleware.ts", "middleware.js"]:
+                module_name = "middleware"
+                self._module_cache[abs_path] = module_name
+                return module_name
+
         except ValueError:
             pass
 

@@ -26,6 +26,17 @@ mcp = FastMCP("Orchestration Bug Detector")
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s", stream=sys.stderr)
 logger = logging.getLogger("mcp-server")
 
+def _wrap_envelope(data: Any, status: str = "success", warnings: List[str] = None, errors: List[str] = None, stats: Dict = None) -> str:
+    return json.dumps({
+        "data": data,
+        "diagnostics": {
+            "status": status,
+            "warnings": warnings or [],
+            "errors": errors or [],
+            "stats": stats or {}
+        }
+    }, indent=2)
+
 # -----------------------------------------------------------------------------
 # Tool 1: generate_module_map
 # -----------------------------------------------------------------------------
@@ -44,10 +55,13 @@ def generate_module_map(root_path: str, seed_service: str = None, max_distance: 
     try:
         engine = DiscoveryEngine()
         result = engine.generate(root_dir=root_path, seed_service=seed_service, max_distance=max_distance)
-        return json.dumps(result, indent=2)
+        stats = {
+            "modules_found": len(result),
+        }
+        return _wrap_envelope(result, stats=stats)
     except Exception as e:
         logger.error(f"Error generating module map: {e}")
-        return json.dumps({"error": str(e)})
+        return _wrap_envelope({}, status="failure", errors=[str(e)])
 
 # -----------------------------------------------------------------------------
 # Tool 2: extract_zonal_graph
@@ -72,14 +86,14 @@ def extract_zonal_graph(seed_service: str, max_distance: int = 2, max_nodes: int
         # Phase 2: TRACE (Resolution)
         trace_engine = TraceEngine()
         result = trace_engine.trace_zone(zone)
-        return json.dumps(result, indent=2)
+        return _wrap_envelope(result, stats={"nodes": len(zone)})
     except RuntimeError as e:
         if "ZONE_OVERLOAD" in str(e):
-            return json.dumps({"error": "ZONE_OVERLOAD", "message": str(e)})
-        raise e
+            return _wrap_envelope({}, status="failure", errors=["ZONE_OVERLOAD", str(e)])
+        return _wrap_envelope({}, status="failure", errors=[str(e)])
     except Exception as e:
         logger.error(f"Error extracting zonal graph: {e}")
-        return json.dumps({"error": str(e)})
+        return _wrap_envelope({}, status="failure", errors=[str(e)])
 
 from scripts.digester import AnomalyDigester
 
@@ -113,10 +127,10 @@ def run_dre_rules(graph: Dict[str, Any], output_dir: str = ".") -> str:
         with open(os.path.join(output_dir, "all_anomalies.json"), "w") as f:
             json.dump(all_anom, f, indent=2)
             
-        return json.dumps(top, indent=2)
+        return _wrap_envelope(top, stats={"top_anomalies": len(top), "all_anomalies": len(all_anom)})
     except Exception as e:
         logger.error(f"Error running DRE rules: {e}")
-        return json.dumps({"error": str(e)})
+        return _wrap_envelope([], status="failure", errors=[str(e)])
 
 from scripts.orchestrator import SubagentOrchestrator
 from scripts.interception_chain import InterceptionChain
@@ -136,10 +150,10 @@ def plan_subagent_tasks(prioritized_digest: List[Dict[str, Any]]) -> str:
     try:
         orchestrator = SubagentOrchestrator()
         tasks = orchestrator.plan_subagent_tasks(prioritized_digest)
-        return json.dumps(tasks, indent=2)
+        return _wrap_envelope(tasks, stats={"tasks_created": len(tasks)})
     except Exception as e:
         logger.error(f"Error planning subagent tasks: {e}")
-        return json.dumps({"error": str(e)})
+        return _wrap_envelope([], status="failure", errors=[str(e)])
 
 # -----------------------------------------------------------------------------
 # Tool 5: check_interception_chain
@@ -158,9 +172,9 @@ def check_interception_chain(infra_evidence: List[str] = None, platform_evidence
             "local": local_evidence or []
         }
         status, layer = chain.check_interception(evidence)
-        return json.dumps({"status": status, "resolved_layer": layer})
+        return _wrap_envelope({"status": status, "resolved_layer": layer})
     except Exception as e:
-        return json.dumps({"error": str(e)})
+        return _wrap_envelope({}, status="failure", errors=[str(e)])
 
 from scripts.safe_fs import SafeFileSystem
 
@@ -199,10 +213,10 @@ def synthesize_findings(findings: List[Dict[str, Any]], service_directory: str, 
                         pass
 
         result = engine.synthesize(findings, middleware_evidence, output_dir=output_dir)
-        return json.dumps(result, indent=2)
+        return _wrap_envelope(result, stats={"valid_findings": len(result.get("findings", [])), "quarantined": len(result.get("quarantine", []))})
     except Exception as e:
         logger.error(f"Error synthesizing findings: {e}")
-        return json.dumps({"error": str(e)})
+        return _wrap_envelope({}, status="failure", errors=[str(e)])
 
 if __name__ == "__main__":
     mcp.run(transport='stdio')

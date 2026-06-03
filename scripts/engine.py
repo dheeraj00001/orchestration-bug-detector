@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 from .registry import ModuleRegistry
 from .evidence_resolver import EvidenceResolver
 from .zone_explorer import ZonalExplorer
+from .typescript_resolver import TypeScriptResolver
 
 from .safe_fs import SafeFileSystem
 
@@ -12,6 +13,7 @@ class DiscoveryEngine:
     def __init__(self, virtual_fs: Dict[str, str] = None):
         self.virtual_fs = virtual_fs
         self.registry = None
+        self.ts_resolver = None
         self.evidence_resolver = EvidenceResolver()
         self.fs = SafeFileSystem()
 
@@ -23,6 +25,7 @@ class DiscoveryEngine:
     def generate(self, root_dir: str = ".", seed_service: Optional[str] = None, max_distance: int = 2) -> Dict:
         root_path = Path(root_dir).resolve()
         self.registry = ModuleRegistry(root_path, virtual_fs=self.virtual_fs)
+        self.ts_resolver = TypeScriptResolver(root_path, virtual_fs=self.virtual_fs)
         
         # Pass 1: Discovery (Raw nodes and files)
         raw_modules = self._perform_pass1(root_path)
@@ -48,10 +51,27 @@ class DiscoveryEngine:
         for file_path in files:
             module_name = self.registry.get_module_name(file_path)
             if module_name not in modules:
-                modules[module_name] = {"path": module_name, "files": {}, "raw_edges": []}
+                modules[module_name] = {"path": module_name, "files": {}, "raw_edges": [], "unresolved_imports": []}
             
             content = self._read_content(file_path if self.virtual_fs else root_path / file_path)
             modules[module_name]["files"][file_path.name] = content
+
+            # Extract imports from source files
+            if file_path.suffix in [".ts", ".tsx", ".js", ".jsx", ".mts", ".cts", ".mjs", ".cjs"]:
+                imports = self.ts_resolver.extract_imports(content, str(file_path))
+                for imp in imports:
+                    if imp["resolutionStatus"] == "resolved":
+                        target_file = Path(imp["resolvedTargetFile"])
+                        target_module = self.registry.get_module_name(target_file)
+                        if target_module != module_name:
+                            modules[module_name]["raw_edges"].append({
+                                "target": target_module, 
+                                "type": "import", 
+                                "details": imp
+                            })
+                    elif imp["resolutionStatus"] == "unresolved":
+                        # PRD: Treat unresolved aliases as data, not failure
+                        modules[module_name]["unresolved_imports"].append(imp)
 
             # Extract potential edges (declared dependencies)
             if file_path.name == "package.json":
@@ -75,7 +95,8 @@ class DiscoveryEngine:
         for mod_name, data in raw_modules.items():
             scored_graph[mod_name] = {
                 "path": data["path"],
-                "edges": []
+                "edges": [],
+                "unresolved_imports": data.get("unresolved_imports", [])
             }
             
             for raw_edge in data["raw_edges"]:
@@ -86,7 +107,8 @@ class DiscoveryEngine:
                         "target": target,
                         "tier": score["tier"],
                         "is_strong_candidate": score["is_strong_candidate"],
-                        "type": raw_edge["type"]
+                        "type": raw_edge["type"],
+                        "details": raw_edge.get("details")
                     })
         
         return scored_graph

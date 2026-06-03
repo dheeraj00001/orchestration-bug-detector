@@ -32,7 +32,8 @@ class SynthesisEngine:
                     evidence["local"].append(res.get("file", "unknown"))
 
         # 2. Deterministic Merge and Sort
-        merged_findings = self.synth.synthesize(findings)
+        synthesis_result = self.synth.synthesize(findings)
+        merged_findings = synthesis_result["valid"]
 
         # 3. Apply Interception Chain
         final_findings = []
@@ -45,11 +46,14 @@ class SynthesisEngine:
                 f["status"] = "confirmed"
             final_findings.append(f)
 
+        synthesis_result["valid"] = final_findings
+
         # 4. Render Reports
-        self.synth.render_reports(final_findings, output_dir=output_dir)
+        self.synth.render_reports(synthesis_result, output_dir=output_dir)
 
         return {
             "findings": final_findings,
+            "quarantine": synthesis_result["quarantine"],
             "report_path": os.path.join(output_dir, "report.md"),
             "json_path": os.path.join(output_dir, "final_anomalies.json")
         }
