@@ -1,6 +1,6 @@
 # Orchestration Bug Detector
 
-Deterministic static analysis tool for detecting architectural defects in large-scale polyglot monorepos. It implements a 4-phase zonal protocol to identify API contract mismatches, authorization boundary leaks, and contract drift without context window exhaustion.
+Deterministic static analysis engine for detecting architectural defects in large-scale polyglot monorepos. It implements a 4-phase zonal protocol to identify API contract mismatches, authorization boundary leaks, and contract drift without context window exhaustion.
 
 ## Quickstart
 
@@ -16,73 +16,73 @@ Deterministic static analysis tool for detecting architectural defects in large-
    ```
 
 ### Usage
-Run the MCP server to expose the detection tools:
+Expose the detection tools via Model Context Protocol (MCP):
 ```bash
 python3 mcp/server.py
 ```
 
-The server provides the following Model Context Protocol (MCP) tools:
-1. `generate_module_map`: Scans monorepo topology and scores edges (Tier 1-3).
-2. `extract_zonal_graph`: Performs zonal contract resolution centered on a seed service.
-3. `run_dre_rules`: Classifies anomalies using the Deterministic Rule Engine.
-4. `plan_subagent_tasks`: Generates targeted verification tasks for subagents.
-5. `check_interception_chain`: Validates findings against hierarchical middleware layers.
-6. `synthesize_findings`: Merges subagent outputs into a final deterministic report.
-
 ## System Architecture
 
-The detector operates through four distinct phases to ensure context efficiency and deterministic accuracy:
+The detector operates through four distinct phases to ensure context efficiency and deterministic accuracy.
 
 ### Phase 1: MAP (Zonal Discovery)
-Performs a two-pass scan. Pass 1 identifies module boundaries via markers (`package.json`, `go.mod`, `requirements.txt`). Pass 2 scores edges into Tiers 1-3 based on "High-Signal Usage Evidence" on both sides of the boundary. Includes `ZonalExplorer` for bounded BFS traversal.
+Performs a two-pass scan of the repository topology.
+- **Pass 1**: Identifies module boundaries via markers (`package.json`, `go.mod`, `requirements.txt`).
+- **Pass 2**: Scores edges into Tiers 1-3 based on usage evidence on both sides of the boundary.
+- **Zonal Scoping**: Implements bounded BFS traversal to prevent analysis bloat.
 
 ### Phase 2: TRACE (Zonal Contract Resolution)
-Resolves contract evidence exclusively within the identified impact zone. Implements **Anchor-First Validation**, prioritizing official IDLs (Proto/GraphQL) over implementation details.
+Resolves contract evidence exclusively within the identified impact zone.
+- **Anchor-First Validation**: Prioritizes official IDLs (Proto/GraphQL) over implementation details.
+- **Canonical Normalization**: Standardizes field names (lowercase, strip underscores, collapse camelCase) to detect mismatches across different naming conventions.
 
 ### Phase 3: DRE & DIGEST (Deterministic Classification)
 Applies a **Deterministic Rule Engine (DRE)** to classify anomalies:
-- `MATCHED`: Contract and implementation align.
-- `ANCHOR_DRIFT`: Payload aligns but anchor is stale or version-skewed.
 - `CONTRACT_MISMATCH`: Payload discrepancy detected (highest precedence).
-- `MISSING_ANCHOR`: High-signal usage without a declared IDL.
+- `ANCHOR_DRIFT`: Payload aligns but anchor is stale or version-skewed.
+- `MISSING_ANCHOR`: High-signal usage evidence exists without a declared IDL.
+- `MATCHED`: Contract and implementation are fully aligned.
 
-Includes `CanonicalNormalizer` for 1-to-1 field mapping verification (lowercase, strip underscores, collapse camelCase).
+### Phase 4: DELEGATE & SYNTHESIZE (Verification)
+Merges findings and applies the **Hierarchical Evidence Chain** (Infra > Platform > Local) to suppress false positives handled by global middleware.
 
-### Phase 4: DELEGATE & SYNTHESIZE (Verification & Reporting)
-Spawns subagents with bounded hypotheses for structural verification. The `DeterministicSynthesizer` merges results, applying the **Hierarchical Evidence Chain** (Infra > Platform > Local) to suppress false positives handled by global middleware.
+## MCP Tool Reference
+
+| Tool | Parameters | Description |
+| :--- | :--- | :--- |
+| `generate_module_map` | `root_path`, `seed_service`, `max_distance` | Returns a high-level weighted dependency map. |
+| `extract_zonal_graph` | `seed_service`, `max_distance`, `max_nodes` | Performs zonal contract resolution and returns a stitched graph. |
+| `run_dre_rules` | `graph`, `output_dir` | Classifies anomalies and writes results to disk. |
+| `plan_subagent_tasks` | `prioritized_digest` | Generates targeted payloads for subagent verification. |
+| `check_interception_chain`| `infra_evidence`, `platform_evidence`, `local_evidence` | Resolves middleware suppression priority. |
+| `synthesize_findings` | `findings`, `service_directory`, `output_dir` | Merges subagent results into a final report. |
 
 ## Testing & Verification
 
-The codebase adheres to strict Test-Driven Development (TDD) principles.
-
+Execute the comprehensive test suite covering all architectural phases:
 ```bash
 pytest tests/
 ```
 
-| Module | Responsibility | Test Count |
-|--------|----------------|------------|
-| `DiscoveryEngine` | Zonal discovery & tier scoring | 2 |
-| `EvidenceResolver` | Tier 1/2/3 scoring rules | 3 |
-| `ZonalExplorer` | Bounded BFS & Tier pruning | 4 |
-| `ZonalContractResolver`| Cross-service contract stitching | 1 |
-| `CanonicalNormalizer` | Field-name normalization | 5 |
-| `DeterministicRuleEngine`| Anomaly classification & priority | 6 |
-| `AnomalyDigester` | Digest generation & suppression | 2 |
-| `DeterministicSynthesizer`| Subagent merge & reporting | 3 |
-| `InterceptionChain` | Hierarchical middleware logic | 4 |
+Core test areas:
+- `tests/test_dre.py`: Anomaly classification logic.
+- `tests/test_zonal_explorer.py`: Bounded BFS and Tier-based pruning.
+- `tests/test_canonical_normalizer.py`: Field normalization edge cases.
+- `tests/test_interception_chain.py`: Middleware suppression hierarchy.
 
-## Configuration
+## Development Workflow
 
-- **Manifest**: `.gemini-plugin/plugin.json`
-- **Skill Definitions**: `skills/orchestration-bug-detector.md`
+### Conventional Commits
+All commits must follow the [Conventional Commits](https://www.conventionalcommits.org/) specification.
+```bash
+git config commit.template .gitmessage
+```
 
-## Development Setup
+### Branching
+Standard GitHub Flow. Create feature branches from `main` and merge via Pull Request. See `BRANCHING.md` for details.
 
-### Adding Language Support
-1. Implement a new extractor in `scripts/extractors/` by satisfying the `BoundaryExtractor` interface.
-2. Register the extension in `ZonalContractResolver`.
-3. Add module root markers to `ModuleRegistry.MODULE_MARKERS`.
-
-## License & Attribution
-
-Internal Engineering Tool. Optimized for large-scale monorepo analysis.
+## Technical Context
+Detailed design specifications and architectural decisions are maintained in:
+- `CONTEXT.md`: Project glossary and core terminology.
+- `docs/PRD.md`: Full product requirements and phase definitions.
+- `docs/adr/`: Architectural Decision Records.

@@ -1,18 +1,19 @@
 ## Purpose
-<!-- Briefly describe the goal of this PR (e.g., add new language extractor, fix saga trace loop). -->
+<!-- Describe the problem being solved or the feature being added -->
 
 ## Changes
-<!-- Numbered list of technical changes. -->
-1. 
+<!-- Technical summary of modifications -->
 
 ## Testing Evidence
-<!-- Explain how behavior was verified. Include pytest output if applicable. -->
+<!-- Exact commands run and their output, or path to new test files -->
+- [ ] `pytest tests/` passes
+- [ ] Manual verification via MCP Inspector (if applicable)
 
 ## Checklist
-- [ ] Titles follow Conventional Commits specification.
-- [ ] New behavior is covered by vertical TDD slices in `tests/`.
-- [ ] No raw file reads introduced; uses `rlm_execute` or engines.
-- [ ] Documentation updated in `README.md` or `skills/` if necessary.
+- [ ] Commit messages follow Conventional Commits
+- [ ] New logic is covered by unit tests
+- [ ] `README.md` or `docs/` updated if necessary
+- [ ] No sensitive credentials or private data included
 
 ## References
-- Related Issue: #
+<!-- Links to related issues or PRs -->
