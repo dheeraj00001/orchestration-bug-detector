@@ -26,15 +26,34 @@ class ContractStitcher:
                 groups[key]["anchor"] = b
 
         stitched_boundaries = []
+        import sys
+        # print(f"DEBUG: Processing {len(groups)} groups", file=sys.stderr)
 
         for key, members in groups.items():
             caller = members["caller"]
             callee = members["callee"]
             anchor = members["anchor"]
+            
+            # if caller and callee:
+            #     print(f"DEBUG: Found match for {key}", file=sys.stderr)
 
             # We only stitch if we have at least one side
             if not (caller or callee):
+                # print(f"DEBUG: Skipping {key} - no caller or callee", file=sys.stderr)
                 continue
+            
+            # ARCH-01: Cross-Tier Boundary Classification
+            is_cross_tier = False
+            boundary_type = "INTERNAL_IMPORT"
+            
+            if caller and callee:
+                caller_tier = caller.get("tier")
+                callee_tier = callee.get("tier")
+                if caller_tier and callee_tier and caller_tier != callee_tier:
+                    is_cross_tier = True
+                    boundary_type = "CROSS_TIER_IMPORT"
+                elif caller_tier and callee_tier:
+                    boundary_type = "SAME_TIER_IMPORT"
 
             # Determine anchor status
             anchor_status = "absent"
@@ -61,7 +80,9 @@ class ContractStitcher:
                 "callee": callee,
                 "anchor_status": anchor_status,
                 "has_shared_idl": anchor_status == "present",
-                "dre_status": dre_status
+                "dre_status": dre_status,
+                "boundary_type": boundary_type,
+                "is_cross_tier": is_cross_tier
             })
 
         return {"boundaries": stitched_boundaries}

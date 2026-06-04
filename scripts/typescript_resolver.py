@@ -1,5 +1,6 @@
 import re
 import json
+import os
 from pathlib import Path
 from typing import Dict, List, Any
 
@@ -15,12 +16,21 @@ class TypeScriptResolver:
         self.tsconfig = self._load_tsconfig()
         
     def _read_file(self, path: Path) -> str:
+        """Reads a file from virtual_fs or real FS. 'path' is expected to be root-relative or absolute."""
         if self.virtual_fs is not None:
+            # Try to get relative path string
             try:
                 rel_path = str(path.relative_to(self.root_dir))
             except ValueError:
                 rel_path = str(path)
+            
+            # Normalize for dict lookup (remove leading ./)
+            rel_path = os.path.normpath(rel_path)
+            if rel_path.startswith("./"): rel_path = rel_path[2:]
+            if rel_path == ".": rel_path = ""
+            
             return self.virtual_fs.get(rel_path, "")
+            
         if path.exists() and path.is_file():
             try:
                 return path.read_text(encoding="utf-8", errors="replace")
@@ -29,11 +39,17 @@ class TypeScriptResolver:
         return ""
 
     def _file_exists(self, path: Path) -> bool:
+        """Checks if a file exists. 'path' is expected to be root-relative or absolute."""
         if self.virtual_fs is not None:
             try:
                 rel = str(path.relative_to(self.root_dir))
             except ValueError:
-                return False
+                rel = str(path)
+            
+            rel = os.path.normpath(rel)
+            if rel.startswith("./"): rel = rel[2:]
+            if rel == ".": rel = ""
+            
             return rel in self.virtual_fs
         return path.is_file()
 
@@ -89,39 +105,40 @@ class TypeScriptResolver:
         
         # 2. Relative resolution
         if specifier.startswith("."):
-            source_dir = self.root_dir / Path(source_file).parent
+            # source_file is root-relative (e.g., 'app/api/route.ts')
+            source_dir = Path(source_file).parent
             base_target = source_dir / specifier
             candidates = self._generate_candidates(base_target)
         
         # 3. Alias resolution (tsconfig paths)
         elif specifier.startswith("@"):
-            # Try to resolve using tsconfig paths
-            # Simplified: assuming {"@/*": ["*"]} or similar
             paths = self.tsconfig.get("compilerOptions", {}).get("paths", {})
             baseUrl = self.tsconfig.get("compilerOptions", {}).get("baseUrl", ".")
             
             for alias, mapped_paths in paths.items():
-                # Convert "@/*" to "^@/(.*)$"
                 alias_pattern = "^" + alias.replace("*", "(.*)") + "$"
                 match = re.match(alias_pattern, specifier)
                 if match:
                     wildcard_val = match.group(1) if match.groups() else ""
                     for mapped_path in mapped_paths:
-                        # Convert "*" to wildcard_val
                         target_path = mapped_path.replace("*", wildcard_val)
-                        base_target = self.root_dir / baseUrl / target_path
+                        # All paths relative to root_dir
+                        base_target = Path(baseUrl) / target_path
                         candidates.extend(self._generate_candidates(base_target))
         
         # 4. Check candidates
         for candidate in candidates:
-            # Normalize path
-            try:
-                # If virtual_fs, we need relative path string
-                norm_candidate = str(Path(candidate).resolve().relative_to(self.root_dir))
-            except ValueError:
-                norm_candidate = str(candidate)
-                
-            if self._file_exists(self.root_dir / norm_candidate if self.virtual_fs is None else Path(norm_candidate)):
+            # Normalize to root-relative path string
+            norm_candidate = os.path.normpath(str(candidate))
+            if norm_candidate.startswith("./"):
+                norm_candidate = norm_candidate[2:]
+            if norm_candidate.startswith("."):
+                # Handle relative paths that went above root
+                continue
+            
+            # Use root_dir to make it absolute-ish for _file_exists
+            full_path = self.root_dir / norm_candidate
+            if self._file_exists(full_path):
                 return {"status": "resolved", "target": norm_candidate, "reason": "found_candidate"}
 
         return {"status": "unresolved", "reason": "file_not_found"}
@@ -138,4 +155,36 @@ class TypeScriptResolver:
             candidates.append(base_target / f"index{ext}")
             
         return candidates
+
+    def resolve(self, import_path: str, source_file: str) -> str:
+        """Exposed method for BUG-01: Resolves an import to a canonical path."""
+        res = self._resolve_path(source_file, import_path)
+        if res["status"] == "resolved":
+            return self.canonical_path(res["target"])
+        return self.canonical_path(import_path) # Normalize even if unresolved
+
+    def canonical_path(self, file_path: str) -> str:
+        """Exposed method for BUG-01: Normalizes a path to a canonical root-relative format."""
+        # Remove leading ./, /, @/, or ~/
+        path_str = str(file_path).replace("\\", "/")
+        
+        # Regex to strip common prefixes and aliases
+        path_str = re.sub(r"^(\./|/|@/|~/)", "", path_str)
+        
+        # Strip common prefixes that shouldn't be in the key
+        for prefix in ["src/"]:
+            if path_str.startswith(prefix):
+                path_str = path_str[len(prefix):]
+        
+        # BUG-01: Strip extensions to ensure alignment
+        # .ts, .tsx, .js, .jsx, .mts, .cts, .mjs, .cjs
+        path_str = re.sub(r"\.(ts|tsx|js|jsx|mts|cts|mjs|cjs)$", "", path_str)
+        
+        # Handle index files: normalize 'path/index' to 'path'
+        if path_str.endswith("/index"):
+            path_str = path_str[:-6]
+        if path_str == "index":
+            path_str = ""
+            
+        return path_str
 

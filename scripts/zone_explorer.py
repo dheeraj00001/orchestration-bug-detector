@@ -11,6 +11,35 @@ class ZonalExplorer:
         if seed_service not in self.graph:
             return {}
 
+        # Sequential Recovery Path per PRD:
+        # 1. Full exploration
+        # 2. Prune Tier 3 at dist >= 1
+        # 3. Prune Tier 2 & 3 at dist >= 1
+        # 4. Reduce distance (recursive)
+        
+        fallbacks = [
+            {"prune": []},
+            {"prune": [3]},
+            {"prune": [2, 3]}
+        ]
+
+        for config in fallbacks:
+            try:
+                return self._do_explore(seed_service, max_distance, max_nodes, prune_tiers=config["prune"])
+            except RuntimeError as e:
+                if "ZONE_OVERLOAD" not in str(e):
+                    raise e
+                # Else: continue to next fallback in loop
+        
+        # If all pruning failed, reduce distance if possible
+        if max_distance > 1:
+            return self.explore(seed_service, max_distance - 1, max_nodes)
+        
+        # If distance reduction also fails or is impossible, raise final error
+        raise RuntimeError("ZONE_OVERLOAD: All recovery paths exhausted.")
+
+    def _do_explore(self, seed_service: str, max_distance: int, max_nodes: int, prune_tiers: List[int] = None) -> Dict:
+        prune_tiers = prune_tiers or []
         queue = [(seed_service, 0)]
         visited = {seed_service: 0}
         zone = {seed_service: self.graph[seed_service]}
@@ -25,6 +54,10 @@ class ZonalExplorer:
                 target = edge["target"]
                 tier = edge.get("tier", 3)
                 is_strong = edge.get("is_strong_candidate", False)
+
+                # Tier-based pruning (Recovery Path)
+                if tier in prune_tiers and current_dist >= 1:
+                    continue
 
                 # Tier-based pruning rules
                 allowed = False

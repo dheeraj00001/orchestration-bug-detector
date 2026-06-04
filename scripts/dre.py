@@ -36,8 +36,15 @@ class DeterministicRuleEngine:
         if anchor_status == "absent" and is_strong:
             return "MISSING_ANCHOR"
 
+        # 3b. WEAK_MATCH (no anchor found, but weak candidate)
+        if anchor_status == "absent" and not is_strong:
+            return "WEAK_MATCH"
+
         # 4. MATCHED (everything aligns)
         if anchor_status == "present" and payload_match:
+            confidence = boundary.get("confidence", 1.0)
+            if confidence < 0.85:
+                return "WEAK_MATCH"
             return "MATCHED"
 
         return "MATCHED" # Default

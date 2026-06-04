@@ -202,15 +202,22 @@ def synthesize_findings(findings: List[Dict[str, Any]], service_directory: str, 
         service_path = Path(service_directory)
         middleware_evidence = []
         if service_path.exists():
-            for file in service_path.rglob('*'):
-                if file.is_file() and fs.is_safe(file) and ("middleware" in file.name.lower() or "interceptor" in file.name.lower()):
-                    try:
-                        middleware_evidence.append({
-                            "file": str(file),
-                            "content": fs.read_text(file)
-                        })
-                    except:
-                        pass
+            for dirpath, dirs, filenames in os.walk(service_path, topdown=True):
+                # Mutate dirs in-place to prune excluded directories
+                dirs[:] = [
+                    d for d in dirs 
+                    if d not in DiscoveryEngine.HARD_EXCLUDE_DIRS and not d.startswith('.')
+                ]
+                for filename in filenames:
+                    file = Path(dirpath) / filename
+                    if file.is_file() and fs.is_safe(file) and ("middleware" in file.name.lower() or "interceptor" in file.name.lower()):
+                        try:
+                            middleware_evidence.append({
+                                "file": str(file),
+                                "content": fs.read_text(file)
+                            })
+                        except:
+                            pass
 
         result = engine.synthesize(findings, middleware_evidence, output_dir=output_dir)
         return _wrap_envelope(result, stats={"valid_findings": len(result.get("findings", [])), "quarantined": len(result.get("quarantine", []))})

@@ -40,17 +40,31 @@ class DeterministicSynthesizer:
                 continue
             
             f = original_f.copy()
-            # Must have at least some basic fields to be considered valid
-            if "severity" not in f and "classification" not in f:
-                quarantine.append({"reason": "missing_required_fields", "raw": original_f})
-                continue
-                
+            
+            # ARCH-03: Open Finding Schema
+            # If it's missing core fields, wrap it instead of quarantining
+            is_valid = "severity" in f or "classification" in f or f.get("type") == "general_insight"
+            
+            if not is_valid:
+                # Wrap as GeneralInsight rather than discard
+                f = {
+                    "anomaly_id": self._generate_fallback_id(f),
+                    "type": "general_insight",
+                    "classification": f.get("classification", "GENERAL_INSIGHT"),
+                    "severity": f.get("severity", "informational"),
+                    "title": f.get("title", "Unclassified Finding"),
+                    "notes": f.get("notes", str(f)),
+                    "evidence_paths": f.get("evidence_paths", []),
+                    "raw": original_f
+                }
+            
             aid = f.get("anomaly_id")
             if not aid:
                 aid = self._generate_fallback_id(f)
                 f["anomaly_id"] = aid
                 
-            f["raw"] = original_f # preserve raw
+            if "raw" not in f:
+                f["raw"] = original_f # preserve raw
 
             if aid not in merged:
                 merged[aid] = f
@@ -63,7 +77,6 @@ class DeterministicSynthesizer:
                 
                 if curr_sev > exis_sev:
                     existing["severity"] = f.get("severity", "low")
-                    # If severity is higher, we might want to adopt the new notes too if they are more comprehensive
                     existing["notes"] = f.get("notes", existing.get("notes"))
                 
                 # Merge evidence paths
